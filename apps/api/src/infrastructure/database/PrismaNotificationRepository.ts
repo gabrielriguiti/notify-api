@@ -33,18 +33,18 @@ export class PrismaNotificationRepository implements INotificationRepository {
     return this.toDomain(row);
   }
 
-  async updateStatus(notification: Notification): Promise<void> {
+  async updateStatus(notification: Notification, attempt: number, error?: string): Promise<void> {
     await prisma.notification.update({
       where: { id: notification.id },
       data: { status: notification.status },
     });
 
-    // Registra o log de tentativa — auditoria de cada mudança de status
     await prisma.notificationLog.create({
       data: {
         notificationId: notification.id,
-        attempt: 1,
+        attempt,
         status: notification.status,
+        error: error ?? null,
       },
     });
   }

@@ -30,40 +30,38 @@ export const notificationWorker = new Worker<NotificationJobData>(
       throw new Error(`No sender for channel ${notification.channel}`);
     }
 
-    console.log(
-      `[Worker] Processando notificação ${notification.id} (tentativa ${job.attemptsMade + 1})`,
-    );
+    const attempt = job.attemptsMade + 1;
 
-    // Só marca como QUEUED se ainda estiver PENDING — em um retry, o status
-    // já pode estar QUEUED de uma tentativa anterior que falhou no envio.
+    console.log(`[Worker] Processando notificação ${notification.id} (tentativa ${attempt})`);
+
     if (notification.status === 'PENDING') {
       notification.markAsQueued();
-      await repository.updateStatus(notification);
+      await repository.updateStatus(notification, attempt);
     }
 
     const result = await sender.send(notification);
 
     if (!result.success) {
       if (result.retryable === false) {
-        // Falha permanente — marca como FAILED e NÃO lança erro,
-        // então o BullMQ não tenta de novo.
         notification.markAsFailed();
-        await repository.updateStatus(notification);
+        await repository.updateStatus(notification, attempt, result.error);
         return result;
       }
 
-      // Falha transitória (ou sender não especificou) — deixa o BullMQ reagendar.
+      // Grava a falha desta tentativa específica antes de relançar,
+      // mesmo que o status final continue QUEUED (vai tentar de novo).
+      await repository.updateStatus(notification, attempt, result.error);
       throw new Error(result.error ?? 'Send failed');
     }
 
     notification.markAsDelivered();
-    await repository.updateStatus(notification);
+    await repository.updateStatus(notification, attempt);
 
     return result;
   },
   {
     connection: redisConnection,
-    concurrency: 5, // processa até 5 jobs em paralelo
+    concurrency: 5,
   },
 );
 
