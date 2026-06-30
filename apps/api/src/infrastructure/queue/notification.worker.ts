@@ -4,16 +4,16 @@ import type { NotificationJobData } from './notification.queue';
 import { PrismaNotificationRepository } from '../database/PrismaNotificationRepository';
 import { ResendEmailSender } from '../senders/ResendEmailSender';
 import { MockSmsSender } from '../senders/MockSmsSender';
-import { MockWebhookSender } from '../senders/MockWebhookSender';
 import type { INotificationSender } from '../../domain/interfaces/INotificationSender';
 import type { NotificationChannel } from '../../domain/entities/Notification';
+import { WebhookSender } from '../senders/WebhookSender';
 
 const repository = new PrismaNotificationRepository();
 
 const senders = new Map<NotificationChannel, INotificationSender>([
   ['EMAIL', new ResendEmailSender(process.env.RESEND_API_KEY!, process.env.EMAIL_FROM!)],
   ['SMS', new MockSmsSender()],
-  ['WEBHOOK', new MockWebhookSender()],
+  ['WEBHOOK', new WebhookSender()],
 ]);
 
 export const notificationWorker = new Worker<NotificationJobData>(
@@ -44,7 +44,15 @@ export const notificationWorker = new Worker<NotificationJobData>(
     const result = await sender.send(notification);
 
     if (!result.success) {
-      // Lançar erro aqui faz o BullMQ acionar o retry automaticamente
+      if (result.retryable === false) {
+        // Falha permanente — marca como FAILED e NÃO lança erro,
+        // então o BullMQ não tenta de novo.
+        notification.markAsFailed();
+        await repository.updateStatus(notification);
+        return result;
+      }
+
+      // Falha transitória (ou sender não especificou) — deixa o BullMQ reagendar.
       throw new Error(result.error ?? 'Send failed');
     }
 
