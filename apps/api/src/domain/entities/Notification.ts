@@ -24,13 +24,13 @@ export class Notification {
   // Factory method — o único jeito de criar uma Notification válida
   static create(params: Omit<NotificationProps, 'id' | 'status' | 'createdAt'>): Notification {
     if (!params.recipient || params.recipient.trim() === '') {
-      throw new Error('O destinatário é obrigatório');
+      throw new Error('Recipient is required');
     }
     if (!params.body || params.body.trim() === '') {
-      throw new Error('O corpo da mensagem é obrigatório');
+      throw new Error('Body is required');
     }
     if (params.channel === 'EMAIL' && !params.subject) {
-      throw new Error('O assunto é obrigatório para notificações por e-mail');
+      throw new Error('Subject is required for EMAIL notifications');
     }
 
     return new Notification({
@@ -49,16 +49,14 @@ export class Notification {
   // Métodos de domínio — a entidade sabe o que pode fazer consigo mesma
   markAsQueued(): void {
     if (this.props.status !== 'PENDING') {
-      throw new Error(
-        `Não é possível enfileirar uma notificação com status "${this.props.status}"`,
-      );
+      throw new Error(`Cannot queue a notification with status "${this.props.status}"`);
     }
     this.props.status = 'QUEUED';
   }
 
   markAsDelivered(): void {
     if (this.props.status !== 'QUEUED') {
-      throw new Error(`Não é possível entregar uma notificação com status "${this.props.status}"`);
+      throw new Error(`Cannot deliver a notification with status "${this.props.status}"`);
     }
     this.props.status = 'DELIVERED';
   }
@@ -69,7 +67,7 @@ export class Notification {
 
   cancel(): void {
     if (this.props.status === 'DELIVERED') {
-      throw new Error('Não é possível cancelar uma notificação já entregue');
+      throw new Error('Cannot cancel an already delivered notification');
     }
     this.props.status = 'CANCELLED';
   }

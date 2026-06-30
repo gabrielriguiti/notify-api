@@ -1,7 +1,6 @@
-import { Notification } from '../../domain/entities/Notification';
-import type { INotificationRepository } from '../../domain/interfaces/INotificationRepository';
-import type { INotificationSender } from '../../domain/interfaces/INotificationSender';
-import type { NotificationChannel } from '../../domain/entities/Notification';
+import { Notification } from '../../domain/entities/Notification.js';
+import type { INotificationRepository } from '../../domain/interfaces/INotificationRepository.js';
+import type { NotificationChannel } from '../../domain/entities/Notification.js';
 
 export interface SendNotificationInput {
   tenantId: string;
@@ -18,32 +17,26 @@ export interface SendNotificationOutput {
   channel: string;
   recipient: string;
   createdAt: Date;
-  alreadyExists: boolean;
 }
 
-// Erro tipado para idempotência — permite tratar esse caso separadamente no controller
 export class NotificationAlreadyExistsError extends Error {
   constructor(public readonly notificationId: string) {
-    super('Já existe uma notificação para esta chave de idempotência');
+    super('Notification already exists for this idempotency key');
     this.name = 'NotificationAlreadyExistsError';
   }
 }
 
+// Responsabilidade única agora: validar, checar idempotência e persistir como PENDING.
+// O envio em si é responsabilidade do worker — ver Dia 4-5.
 export class SendNotificationUseCase {
-  constructor(
-    private readonly repository: INotificationRepository,
-    private readonly senders: Map<NotificationChannel, INotificationSender>,
-  ) {}
+  constructor(private readonly repository: INotificationRepository) {}
 
   async execute(input: SendNotificationInput): Promise<SendNotificationOutput> {
-    // 1. Verificar idempotência — se já existe, retornar sem processar
     const existing = await this.repository.findByIdempotencyKey(input.idempotencyKey);
-
     if (existing) {
       throw new NotificationAlreadyExistsError(existing.id);
     }
 
-    // 2. Criar a entidade (validações acontecem aqui dentro)
     const notification = Notification.create({
       tenantId: input.tenantId,
       channel: input.channel,
@@ -53,27 +46,7 @@ export class SendNotificationUseCase {
       idempotencyKey: input.idempotencyKey,
     });
 
-    // 3. Persistir como PENDING antes de qualquer envio
     await this.repository.save(notification);
-
-    // 4. Buscar o sender correto para o canal
-    const sender = this.senders.get(input.channel);
-    if (!sender) {
-      throw new Error(`Nenhum remetente registrado para o canal: ${input.channel}`);
-    }
-
-    // 5. Tentar enviar
-    notification.markAsQueued();
-    const result = await sender.send(notification);
-
-    // 6. Atualizar status baseado no resultado
-    if (result.success) {
-      notification.markAsDelivered();
-    } else {
-      notification.markAsFailed();
-    }
-
-    await this.repository.updateStatus(notification);
 
     return {
       id: notification.id,
@@ -81,7 +54,6 @@ export class SendNotificationUseCase {
       channel: notification.channel,
       recipient: notification.recipient,
       createdAt: notification.createdAt,
-      alreadyExists: false,
     };
   }
 }
