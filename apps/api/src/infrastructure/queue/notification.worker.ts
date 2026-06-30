@@ -2,7 +2,7 @@ import { Worker, type Job } from 'bullmq';
 import { redisConnection } from './connection';
 import type { NotificationJobData } from './notification.queue';
 import { PrismaNotificationRepository } from '../database/PrismaNotificationRepository';
-import { MockEmailSender } from '../senders/MockEmailSender';
+import { ResendEmailSender } from '../senders/ResendEmailSender';
 import { MockSmsSender } from '../senders/MockSmsSender';
 import { MockWebhookSender } from '../senders/MockWebhookSender';
 import type { INotificationSender } from '../../domain/interfaces/INotificationSender';
@@ -11,7 +11,7 @@ import type { NotificationChannel } from '../../domain/entities/Notification';
 const repository = new PrismaNotificationRepository();
 
 const senders = new Map<NotificationChannel, INotificationSender>([
-  ['EMAIL', new MockEmailSender()],
+  ['EMAIL', new ResendEmailSender(process.env.RESEND_API_KEY!, process.env.EMAIL_FROM!)],
   ['SMS', new MockSmsSender()],
   ['WEBHOOK', new MockWebhookSender()],
 ]);
