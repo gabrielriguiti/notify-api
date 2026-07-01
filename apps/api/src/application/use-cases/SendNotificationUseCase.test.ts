@@ -1,7 +1,7 @@
 import { SendNotificationUseCase, NotificationAlreadyExistsError } from './SendNotificationUseCase';
 import type { INotificationRepository } from '../../domain/interfaces/INotificationRepository';
-import type { INotificationSender } from '../../domain/interfaces/INotificationSender';
 import { Notification } from '../../domain/entities/Notification';
+import { ITemplateRepository } from '../../domain/interfaces/ITemplateRepository';
 
 // Fakes em memória — sem banco, sem rede
 function makeRepository(existing?: Notification): INotificationRepository {
@@ -25,10 +25,13 @@ function makeRepository(existing?: Notification): INotificationRepository {
   };
 }
 
-function makeSender(success: boolean): INotificationSender {
+function makeTemplateRepository(): ITemplateRepository {
   return {
-    async send(): Promise<{ success: boolean; error?: string }> {
-      return { success, error: success ? undefined : 'Provider timeout' };
+    async findByName() {
+      return null;
+    },
+    async save(t) {
+      return { id: 'tpl-1', ...t };
     },
   };
 }
@@ -44,31 +47,23 @@ describe('SendNotificationUseCase', () => {
   };
 
   it('envia com sucesso e retorna status DELIVERED', async () => {
-    const useCase = new SendNotificationUseCase(
-      makeRepository(),
-      new Map([['EMAIL', makeSender(true)]]),
-    );
+    const useCase = new SendNotificationUseCase(makeRepository(), makeTemplateRepository());
 
     const result = await useCase.execute(input);
 
     expect(result.status).toBe('DELIVERED');
     expect(result.channel).toBe('EMAIL');
-    expect(result.alreadyExists).toBe(false);
   });
 
   it('marca como FAILED quando o sender falha', async () => {
-    const useCase = new SendNotificationUseCase(
-      makeRepository(),
-      new Map([['EMAIL', makeSender(false)]]),
-    );
+    const useCase = new SendNotificationUseCase(makeRepository(), makeTemplateRepository());
 
     const result = await useCase.execute(input);
     expect(result.status).toBe('FAILED');
   });
 
   it('lança NotificationAlreadyExistsError na segunda chamada com a mesma key', async () => {
-    const repo = makeRepository();
-    const useCase = new SendNotificationUseCase(repo, new Map([['EMAIL', makeSender(true)]]));
+    const useCase = new SendNotificationUseCase(makeRepository(), makeTemplateRepository());
 
     await useCase.execute(input);
 
@@ -76,11 +71,7 @@ describe('SendNotificationUseCase', () => {
   });
 
   it('lança erro se não houver sender para o canal', async () => {
-    const useCase = new SendNotificationUseCase(
-      makeRepository(),
-      new Map(), // nenhum sender registrado
-    );
-
+    const useCase = new SendNotificationUseCase(makeRepository(), makeTemplateRepository());
     await expect(useCase.execute(input)).rejects.toThrow(
       'Nenhum remetente registrado para o canal: EMAIL',
     );

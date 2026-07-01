@@ -23,6 +23,18 @@ async function main(): Promise<void> {
     },
   });
 
+  await prisma.notificationTemplate.upsert({
+    where: { tenantId_name: { tenantId: tenant.id, name: 'welcome-email' } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      name: 'welcome-email',
+      channel: 'EMAIL',
+      subject: 'Bem-vindo, {{name}}!',
+      body: 'Olá, {{name}}! Sua conta foi criada com sucesso.\n\nSeu ID de usuário é: {{userId}}.',
+    },
+  });
+
   console.log('✅ Tenant created:', tenant.name);
   console.log('✅ API Key created:', apiKey.key);
   console.log('\n👉 Use this key in your requests:');

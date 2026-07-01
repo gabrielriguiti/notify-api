@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { notificationsRoute } from './http/routes/notifications.route';
 import './infrastructure/queue/notification.worker';
+import { templatesRoute } from './http/routes/templates.route';
 
 const start = async () => {
   const app = Fastify({ logger: true });
@@ -8,6 +9,7 @@ const start = async () => {
   app.get('/health', async () => ({ status: 'ok' }));
 
   await app.register(notificationsRoute);
+  await app.register(templatesRoute);
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen({ port, host: '0.0.0.0' });

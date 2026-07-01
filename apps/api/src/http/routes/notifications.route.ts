@@ -7,18 +7,30 @@ import {
 } from '../../application/use-cases/SendNotificationUseCase';
 import { PrismaNotificationRepository } from '../../infrastructure/database/PrismaNotificationRepository';
 import { notificationQueue } from '../../infrastructure/queue/notification.queue';
+import { PrismaTemplateRepository } from '../../infrastructure/database/PrismaTemplateRepository';
 
-const bodySchema = z.object({
-  channel: z.enum(['EMAIL', 'SMS', 'WEBHOOK']),
-  recipient: z.string().min(1),
-  subject: z.string().optional(),
-  body: z.string().min(1),
-  idempotencyKey: z.string().min(1),
-});
+const bodySchema = z
+  .object({
+    channel: z.enum(['EMAIL', 'SMS', 'WEBHOOK']),
+    recipient: z.string().min(1),
+    idempotencyKey: z.string().min(1),
+
+    // Opção 1: texto direto (como antes)
+    subject: z.string().optional(),
+    body: z.string().optional(),
+
+    // Opção 2: template com variáveis
+    templateName: z.string().optional(),
+    variables: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  })
+  .refine((data) => data.body || data.templateName, {
+    message: 'Either body or templateName must be provided',
+  });
 
 // Composition root local — onde as dependências concretas são montadas
 const repository = new PrismaNotificationRepository();
-const useCase = new SendNotificationUseCase(repository);
+const templateRepository = new PrismaTemplateRepository();
+const useCase = new SendNotificationUseCase(repository, templateRepository);
 
 export async function notificationsRoute(app: FastifyInstance): Promise<void> {
   app.post('/notifications', { preHandler: authMiddleware }, async (request, reply) => {
